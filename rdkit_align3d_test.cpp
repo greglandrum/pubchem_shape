@@ -22,6 +22,8 @@ using namespace std;
 using namespace RDKit;
 
 // Bondi radii
+//  can find more of these in Table 12 of this publication:
+//   https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3658832/
 const double radius_carbon      = 1.70;
 const double radius_nitrogen    = 1.55;
 const double radius_oxygen      = 1.52;
@@ -35,7 +37,7 @@ const double radius_iodine      = 1.98;
 const double radius_color       = 1.08265;  // same radius for all feature/color "atoms"
 
 void PrepareConformer(
-    RWMol& mol,
+    ROMol& mol,
     vector < float >& coord,
     vector < double >& alpha_vector,
     vector < unsigned int >& atom_type_vector,
@@ -125,11 +127,8 @@ void PrepareConformer(
     unsigned int nAtoms = mol.getNumAtoms();
     //DEBUG_MSG("num atoms: " << nAtoms);
     
-    unsigned int nHeavyAtoms = 0;
+    unsigned int nHeavyAtoms = mol.getNumHeavyAtoms();
     unsigned int i;
-    for (i=0; i<nAtoms; ++i)
-        if (mol.getAtomWithIdx(i)->getAtomicNum() > 1)
-            ++nHeavyAtoms;
     DEBUG_MSG("num heavy atoms: " << nHeavyAtoms);
     
     unsigned int nAlignmentAtoms = nHeavyAtoms + feature_idx_type.size();
@@ -138,7 +137,7 @@ void PrepareConformer(
     atom_type_vector.resize(nAlignmentAtoms);
     
     unsigned int array_idx = 0;
-    float ave_x = 0.0, ave_y = 0.0, ave_z = 0.0; 
+    RDGeom::Point3D ave;
     for (i=0; i<nAtoms; ++i) {
         unsigned int Z = mol.getAtomWithIdx(i)->getAtomicNum();
         if (Z > 1) {
@@ -146,9 +145,7 @@ void PrepareConformer(
             atom_type_vector[array_idx] = 0;
             
             const RDGeom::Point3D& pos = conformer.getAtomPos(i);
-            ave_x += pos.x;
-            ave_y += pos.y;
-            ave_z += pos.z;
+            ave += pos;
         
             switch (Z) {
                 case 6:  rad_vector[array_idx] = radius_carbon;         break;
@@ -162,6 +159,8 @@ void PrepareConformer(
                 case 35: rad_vector[array_idx] = radius_bromine;        break;
                 case 53: rad_vector[array_idx] = radius_iodine;         break;
                 default:
+                    // FIX: add a lookup from the periodic table here.
+                    //   the results won't be 100% consistent, but it's better than nothing
                     ERRORTHROW("Can't use molecules with element Z=" << Z);
             }
             
@@ -170,10 +169,8 @@ void PrepareConformer(
     }
 
     // translate steric center to origin
-    ave_x /= nHeavyAtoms;
-    ave_y /= nHeavyAtoms;
-    ave_z /= nHeavyAtoms;
-    DEBUG_MSG("steric center: (" << ave_x << ", " << ave_y << ", " << ave_z << ")");
+    ave /= nHeavyAtoms;
+    DEBUG_MSG("steric center: (" << ave << ")");
 
     coord.resize(nAlignmentAtoms * 3);
 
@@ -182,9 +179,7 @@ void PrepareConformer(
     
         // translate all atoms
         RDGeom::Point3D& pos = conformer.getAtomPos(i);
-        pos.x -= ave_x;
-        pos.y -= ave_y;
-        pos.z -= ave_z;
+        pos -= ave;
         
         // but use only non-H for alignment
         if (mol.getAtomWithIdx(i)->getAtomicNum() > 1) {        
@@ -198,25 +193,21 @@ void PrepareConformer(
     // get feature coordinates - simply the average of coords of all atoms in the feature
     for (i=0; i<feature_idx_type.size(); ++i) {
     
-        double x = 0.0, y = 0.0, z = 0.0;
+        RDGeom::Point3D floc;
         for (unsigned int j=0; j<feature_idx_type[i].first.size(); ++j) {
             unsigned int idx = feature_idx_type[i].first[j];
             if (idx >= nAtoms || mol.getAtomWithIdx(idx)->getAtomicNum() <= 1)
                 ERRORTHROW("Invalid feature atom index");
             const RDGeom::Point3D& pos = conformer.getAtomPos(idx);
-            x += pos.x;
-            y += pos.y;
-            z += pos.z;
+            floc += pos;
         }
-        x /= feature_idx_type[i].first.size();
-        y /= feature_idx_type[i].first.size();
-        z /= feature_idx_type[i].first.size();
-        DEBUG_MSG("feature type " << feature_idx_type[i].second << " (" << x << ", " << y << ", " << z << ")");
+        floc /= feature_idx_type[i].first.size();
+        DEBUG_MSG("feature type " << feature_idx_type[i].second << " (" << floc << ")");
         
         array_idx = nHeavyAtoms + i;
-        coord[array_idx * 3] = x;
-        coord[(array_idx * 3) + 1] = y;
-        coord[(array_idx * 3) + 2] = z;
+        coord[array_idx * 3] = floc.x;
+        coord[(array_idx * 3) + 1] = floc.y;
+        coord[(array_idx * 3) + 2] = floc.z;
         rad_vector[array_idx] = radius_color;
         atom_type_vector[array_idx] = feature_idx_type[i].second;
     }
@@ -250,8 +241,8 @@ void PrepareConformer(
 
 void Neighbor(
     // inputs
-    RWMol& ref,
-    RWMol& fit,
+    ROMol& ref,
+    ROMol& fit,
     const double opt_param,
     const unsigned int max_preiters,
     const unsigned int max_postiters,
@@ -301,18 +292,18 @@ void Neighbor(
         fit_sof);
         
     // write out ref and fit, both translated to origin but not yet aligned 
-    {{
+    {
         SDWriter ref_sdf("ref.sdf");
         ref_sdf.write(ref);
         SDWriter fit_sdf("fit.sdf");
         fit_sdf.write(fit);
-    }}
+    }
 
     set < unsigned int > jointColorAtomTypeSet;
     Align3D::getJointColorTypeSet( 
-        &(ref_atom_type_vector[0]),
+        ref_atom_type_vector.data(),
 	ref_atom_type_vector.size(),
-	&(fit_atom_type_vector[0]),
+	fit_atom_type_vector.data(),
 	fit_atom_type_vector.size(),
 	jointColorAtomTypeSet);
     Align3D::restrictColorAtomType2IndexVectorMap(ref_colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
@@ -320,13 +311,13 @@ void Neighbor(
 
     DEBUG_MSG("Running alignment...");
     Align3D::Neighbor_Conformers(
-        &(ref_coord[0]),
+        ref_coord.data(),
         alpha_ref_vector,
         ref_volumeAtomIndexVector,
         ref_colorAtomType2IndexVectorMap,
         ref_sov,
         ref_sof,
-        &(fit_coord[0]),
+        fit_coord.data(),
         alpha_fit_vector,
         fit_volumeAtomIndexVector,
         fit_colorAtomType2IndexVectorMap,
@@ -356,7 +347,7 @@ void Neighbor(
         orig[(i * 3) + 2] = pos.z;
     }
     
-    Align3D::VApplyRotTransMatrix(&(transformed[0]), &(orig[0]), fit.getNumAtoms(), matrix);
+    Align3D::VApplyRotTransMatrix(transformed.data(), orig.data(), fit.getNumAtoms(), matrix);
     
     for (i=0; i<fit.getNumAtoms(); ++i) {
         RDGeom::Point3D& pos = fit_conformer.getAtomPos(i);
@@ -379,21 +370,20 @@ int main(int argc, char **argv)
             ERRORTHROW("Usage: rdkit_example <ref_conformer.sdf> <fit_conformer.sdf> opt_param max_preiters max_postiters");
         
         SDMolSupplier s_ref(argv[1], false, false, true);
-        unique_ptr < ROMol > ro_ref(s_ref.next());
-        if (!ro_ref.get())
+        unique_ptr < ROMol > ref(s_ref.next());
+        if (!ref.get())
             ERRORTHROW("Failed to read ref conformer");
-        RWMol ref(*ro_ref);
         
         SDMolSupplier s_fit(argv[2], false, false, true);
-        unique_ptr < ROMol > ro_fit(s_fit.next());
-        if (!ro_fit.get())
+        unique_ptr < ROMol > fit(s_fit.next());
+        if (!fit.get())
             ERRORTHROW("Failed to read fit conformer");
-        RWMol fit(*ro_fit);
+        // RWMol fit(*ro_fit);
         
         vector < float > matrix(12, 0.0);
         double nbr_st = 0.0;
         double nbr_ct = 0.0;
-        Neighbor(ref, fit, stod(argv[3]), stoul(argv[4]), stoul(argv[5]), &(matrix[0]), nbr_st, nbr_ct);
+        Neighbor(*ref, *fit, stod(argv[3]), stoul(argv[4]), stoul(argv[5]), &(matrix[0]), nbr_st, nbr_ct);
         
         status = 0;
         
