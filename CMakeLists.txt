@@ -10,3 +10,6 @@ add_library(pubchem_align3d SHARED shape_functions1.cpp shape_functions2.cpp sha
 
 add_executable(rdkit_test rdkit_align3d_test.cpp )
 target_link_libraries(rdkit_test pubchem_align3d RDKit::FileParsers)
+
+add_executable(sdf_align sdf_align.cpp )
+target_link_libraries(sdf_align pubchem_align3d RDKit::SubstructMatch RDKit::Fingerprints RDKit::FileParsers)
