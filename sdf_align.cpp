@@ -5,15 +5,14 @@
 #include <GraphMol/FileParsers/MolSupplier.h>
 #include <GraphMol/FileParsers/MolWriters.h>
 #include <GraphMol/Fingerprints/FingerprintUtil.h>
-#include <GraphMol/Substruct/SubstructMatch.h>
 #include <GraphMol/RWMol.h>
+#include <GraphMol/Substruct/SubstructMatch.h>
 
+#include <RDGeneral/BoostEndInclude.h>
 #include <RDGeneral/BoostStartInclude.h>
 #include <boost/flyweight.hpp>
 #include <boost/flyweight/key_value.hpp>
 #include <boost/flyweight/no_tracking.hpp>
-#include <RDGeneral/BoostEndInclude.h>
-
 
 #include "shape_functions.hpp"
 
@@ -34,51 +33,87 @@ using namespace RDKit;
 // Bondi radii
 //  can find more of these in Table 12 of this publication:
 //   https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3658832/
-const double radius_carbon = 1.70;
-const double radius_nitrogen = 1.55;
-const double radius_oxygen = 1.52;
-const double radius_fluorine = 1.47;
-const double radius_silicon = 2.10;
-const double radius_phosphorous = 1.80;
-const double radius_sulfur = 1.80;
-const double radius_chlorine = 1.75;
-const double radius_bromine = 1.85;
-const double radius_iodine = 1.98;
-const double radius_color =
+const std::map<unsigned int, double> vdw_radii = {
+    {0, 1.10},  // dummy atom (value copied from H)
+    {1, 1.10},  // H
+    {2, 1.40},  // He
+    {3, 1.81},  // Li
+    {4, 1.53},  // Be
+    {5, 1.92},  // B
+    {6, 1.70},  // C
+    {7, 1.55},  // N
+    {8, 1.52},  // O
+    {9, 1.47},  // F
+    {10, 1.54}, // Ne
+    {11, 2.27}, // Na
+    {12, 1.73}, // Mg
+    {13, 1.84}, // Al
+    {14, 2.10}, // Si
+    {15, 1.80}, // P
+    {16, 1.80}, // S
+    {17, 1.75}, // Cl
+    {18, 1.88}, // Ar
+    {19, 2.75}, // K
+    {20, 2.31}, // Ca
+    {31, 1.87}, // Ga
+    {32, 2.11}, // Ge
+    {33, 1.85}, // As
+    {34, 1.90}, // Se
+    {35, 1.83}, // Br
+    {36, 2.02}, // Kr
+    {37, 3.03}, // Rb
+    {38, 2.49}, // Sr
+    {49, 1.93}, // In
+    {50, 2.17}, // Sn
+    {51, 2.06}, // Sb
+    {52, 2.06}, // Te
+    {53, 1.98}, // I
+    {54, 2.16}, // Xe
+    {55, 3.43}, // Cs
+    {56, 2.68}, // Ba
+    {81, 1.96}, // Tl
+    {82, 2.02}, // Pb
+    {83, 2.07}, // Bi
+    {84, 1.97}, // Po
+    {85, 2.02}, // At
+    {86, 2.20}, // Rn
+    {87, 3.48}, // Fr
+    {88, 2.83}, // Ra
+};
+constexpr double radius_color =
     1.08265; // same radius for all feature/color "atoms"
 
-typedef boost::flyweight<boost::flyweights::key_value<std::string, RDKit::MorganFingerprints::ss_matcher>,
-                         boost::flyweights::no_tracking>
+typedef boost::flyweight<
+    boost::flyweights::key_value<std::string,
+                                 RDKit::MorganFingerprints::ss_matcher>,
+    boost::flyweights::no_tracking>
     pattern_flyweight;
 // Definitions for feature points adapted from:
 // Gobbi and Poppinger, Biotech. Bioeng. _61_ 47-54 (1998)
-std::vector<std::string> smartsPatterns={
+const std::vector<std::string> smartsPatterns = {
     "[$([N;!H0;v3,v4&+1]),\
 $([O,S;H1;+0]),\
-n&H1&+0]",                                                  // Donor
+n&H1&+0]",                               // Donor
     "[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),\
 $([O,S;H0;v2]),\
 $([O,S;-]),\
 $([N;v3;!$(N-*=[O,N,P,S])]),\
 n&H0&+0,\
-$([o,s;+0;!$([o,s]:n);!$([o,s]:c:n)])]",                    // Acceptor
-//    "[a]",                                                  // Aromatic
-//    "[F,Cl,Br,I]",                                          // Halogen
+$([o,s;+0;!$([o,s]:n);!$([o,s]:c:n)])]", // Acceptor
+    //    "[a]",                                                  // Aromatic
+    //    "[F,Cl,Br,I]",                                          // Halogen
     "[#7;+,\
 $([N;H2&+0][$([C,a]);!$([C,a](=O))]),\
 $([N;H1&+0]([$([C,a]);!$([C,a](=O))])[$([C,a]);!$([C,a](=O))]),\
-$([N;H0&+0]([C;!$(C(=O))])([C;!$(C(=O))])[C;!$(C(=O))])]",  // Basic
-    "[$([C,S](=[O,S,P])-[O;H1,-1])]"                        // Acidic
+$([N;H0&+0]([C;!$(C(=O))])([C;!$(C(=O))])[C;!$(C(=O))])]", // Basic
+    "[$([C,S](=[O,S,P])-[O;H1,-1])]"                       // Acidic
 };
 std::vector<const ROMol *> *getPh4Patterns() {
   static std::unique_ptr<std::vector<const ROMol *>> patterns;
   if (!patterns) {
     patterns.reset(new std::vector<const ROMol *>());
     for (auto smarts : RDKit::MorganFingerprints::defaultFeatureSmarts) {
-      const ROMol *matcher =
-          pattern_flyweight(smarts)
-              .get()
-              .getMatcher();
+      const ROMol *matcher = pattern_flyweight(smarts).get().getMatcher();
       CHECK_INVARIANT(matcher, "bad smarts");
       patterns->push_back(matcher);
     }
@@ -161,21 +196,21 @@ void PrepareConformer(
 
     DEBUG_MSG("# features: " << feature_idx_type.size());
   } else {
-#if 0
+#if 1
     const auto patts = getPh4Patterns();
     feature_idx_type.clear();
 
-    for(auto p=0u; p<patts->size();++p ){
-        auto matches = SubstructMatch(mol,*patts->at(p));
-        for(auto match : matches){
-            std::vector<unsigned int> ats;
-            for(const auto &pr : match){
-                ats.push_back(pr.second);
-            }
-            feature_idx_type.emplace_back(ats,p+1);
+    for (auto p = 0u; p < patts->size(); ++p) {
+      auto matches = SubstructMatch(mol, *patts->at(p));
+      for (auto match : matches) {
+        std::vector<unsigned int> ats;
+        for (const auto &pr : match) {
+          ats.push_back(pr.second);
         }
+        feature_idx_type.emplace_back(ats, p + 1);
+      }
     }
-  #endif
+#endif
   }
 
   // unpack atoms
@@ -209,43 +244,10 @@ void PrepareConformer(
       const RDGeom::Point3D &pos = conformer.getAtomPos(i);
       ave += pos;
 
-      switch (Z) {
-      case 6:
-        rad_vector[array_idx] = radius_carbon;
-        break;
-      case 7:
-        rad_vector[array_idx] = radius_nitrogen;
-        break;
-      case 8:
-        rad_vector[array_idx] = radius_oxygen;
-        break;
-      case 9:
-        rad_vector[array_idx] = radius_fluorine;
-        break;
-      case 14:
-        rad_vector[array_idx] = radius_silicon;
-        break;
-      case 15:
-        rad_vector[array_idx] = radius_phosphorous;
-        break;
-      case 16:
-        rad_vector[array_idx] = radius_sulfur;
-        break;
-      case 17:
-        rad_vector[array_idx] = radius_chlorine;
-        break;
-      case 35:
-        rad_vector[array_idx] = radius_bromine;
-        break;
-      case 53:
-        rad_vector[array_idx] = radius_iodine;
-        break;
-      default:
-        // FIX: add a lookup from the periodic table here.
-        //   the results won't be 100% consistent, but it's better than nothing
-        ERRORTHROW("Can't use molecules with element Z=" << Z);
+      if (vdw_radii.find(Z) == vdw_radii.end()) {
+        ERRORTHROW("No VdW radius for atom with Z=" << Z);
       }
-
+      rad_vector[array_idx] = vdw_radii.at(Z);
       ++array_idx;
     }
   }
@@ -412,8 +414,10 @@ int main(int argc, char **argv) {
   try {
 
     if (argc != 2)
-      ERRORTHROW("Usage: sdf_align <ref_conformer.sdf> <fit_conformer.sdf> "
-                 "opt_param max_preiters max_postiters");
+      ERRORTHROW("Usage: sdf_align <input.sdf>   The first molecule in the SDF "
+                 "is the reference"); //"opt_param
+                                      // max_preiters
+                                      // max_postiters");
 
     SDMolSupplier suppl(argv[1]);
     SDWriter writer("sdf_align.out.sdf");
