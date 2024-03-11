@@ -26,8 +26,8 @@ using namespace std;
     throw runtime_error(os.str());                                             \
   } while (0)
 
-#define DEBUG_MSG(msg_stream) cout << msg_stream << '\n'
-// #define DEBUG_MSG(msg_stream)
+// #define DEBUG_MSG(msg_stream) cout << msg_stream << '\n'
+#define DEBUG_MSG(msg_stream)
 
 using namespace RDKit;
 
