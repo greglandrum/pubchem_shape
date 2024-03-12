@@ -122,19 +122,19 @@ std::vector<const ROMol *> *getPh4Patterns() {
   return patterns.get();
 }
 
-void PrepareConformer(
-    ROMol &mol, vector<float> &coord, vector<double> &alpha_vector,
-    vector<unsigned int> &atom_type_vector,
-    vector<unsigned int> &volumeAtomIndexVector,
-    map<unsigned int, vector<unsigned int>> &colorAtomType2IndexVectorMap,
-    double &sov, double &sof) {
-  coord.clear();
-  alpha_vector.clear();
-  atom_type_vector.clear();
-  volumeAtomIndexVector.clear();
-  colorAtomType2IndexVectorMap.clear();
-  sov = 0.0;
-  sof = 0.0;
+using ShapeInput = struct {
+  vector<float> coord;
+  vector<double> alpha_vector;
+  vector<unsigned int> atom_type_vector;
+  vector<unsigned int> volumeAtomIndexVector;
+  map<unsigned int, vector<unsigned int>> colorAtomType2IndexVectorMap;
+  double sov{0.0};
+  double sof{0.0};
+};
+
+// the conformer is translated to the origin
+ShapeInput PrepareConformer(ROMol &mol, int confId = -1) {
+  ShapeInput res;
 
   // unpack features (PubChem-specific property from SDF)
   // NOTE: this unpacking assumes that RWMol-atom-index = SDF-atom-number - 1
@@ -143,7 +143,8 @@ void PrepareConformer(
 
   vector<pair<vector<unsigned int>, unsigned int>> feature_idx_type;
 
-  if (mol.hasProp("PUBCHEM_PHARMACOPHORE_FEATURES")) {
+  std::string features;
+  if (mol.getPropIfPresent("PUBCHEM_PHARMACOPHORE_FEATURES", features)) {
 
     // regular atoms have type 0; feature "atoms" (features represented by a
     // single point+radius) must have type > 0
@@ -152,8 +153,6 @@ void PrepareConformer(
         {"donor", 4},    {"hydrophobe", 5}, {"rings", 6},
     };
 
-    string features;
-    mol.getProp("PUBCHEM_PHARMACOPHORE_FEATURES", features);
     istringstream iss(features);
     string line;
     unsigned int n = 0;
@@ -215,9 +214,7 @@ void PrepareConformer(
 
   // unpack atoms
 
-  if (mol.getNumConformers() != 1)
-    ERRORTHROW("Must have exactly one conformer");
-  Conformer &conformer = mol.getConformer();
+  Conformer &conformer = mol.getConformer(confId);
   if (!conformer.is3D())
     ERRORTHROW("Conformer must be 3D");
 
@@ -225,30 +222,23 @@ void PrepareConformer(
   // DEBUG_MSG("num atoms: " << nAtoms);
 
   unsigned int nHeavyAtoms = mol.getNumHeavyAtoms();
-  unsigned int i;
   DEBUG_MSG("num heavy atoms: " << nHeavyAtoms);
 
   unsigned int nAlignmentAtoms = nHeavyAtoms + feature_idx_type.size();
 
   vector<double> rad_vector(nAlignmentAtoms);
-  atom_type_vector.resize(nAlignmentAtoms);
+  res.atom_type_vector.resize(nAlignmentAtoms, 0);
 
-  unsigned int array_idx = 0;
   RDGeom::Point3D ave;
-  for (i = 0; i < nAtoms; ++i) {
+  for (unsigned i = 0; i < nAtoms; ++i) {
     unsigned int Z = mol.getAtomWithIdx(i)->getAtomicNum();
     if (Z > 1) {
-
-      atom_type_vector[array_idx] = 0;
-
-      const RDGeom::Point3D &pos = conformer.getAtomPos(i);
-      ave += pos;
+      ave += conformer.getAtomPos(i);
 
       if (vdw_radii.find(Z) == vdw_radii.end()) {
         ERRORTHROW("No VdW radius for atom with Z=" << Z);
       }
-      rad_vector[array_idx] = vdw_radii.at(Z);
-      ++array_idx;
+      rad_vector[i] = vdw_radii.at(Z);
     }
   }
 
@@ -256,68 +246,66 @@ void PrepareConformer(
   ave /= nHeavyAtoms;
   DEBUG_MSG("steric center: (" << ave << ")");
 
-  coord.resize(nAlignmentAtoms * 3);
+  res.coord.resize(nAlignmentAtoms * 3);
 
-  array_idx = 0;
-  for (i = 0; i < nAtoms; ++i) {
-
+  for (unsigned i = 0; i < nAtoms; ++i) {
     // translate all atoms
     RDGeom::Point3D &pos = conformer.getAtomPos(i);
     pos -= ave;
 
     // but use only non-H for alignment
     if (mol.getAtomWithIdx(i)->getAtomicNum() > 1) {
-      coord[array_idx * 3] = pos.x;
-      coord[(array_idx * 3) + 1] = pos.y;
-      coord[(array_idx * 3) + 2] = pos.z;
-      ++array_idx;
+      res.coord[i * 3] = pos.x;
+      res.coord[(i * 3) + 1] = pos.y;
+      res.coord[(i * 3) + 2] = pos.z;
     }
   }
 
   // get feature coordinates - simply the average of coords of all atoms in the
   // feature
-  for (i = 0; i < feature_idx_type.size(); ++i) {
+  for (unsigned i = 0; i < feature_idx_type.size(); ++i) {
 
     RDGeom::Point3D floc;
     for (unsigned int j = 0; j < feature_idx_type[i].first.size(); ++j) {
       unsigned int idx = feature_idx_type[i].first[j];
       if (idx >= nAtoms || mol.getAtomWithIdx(idx)->getAtomicNum() <= 1)
         ERRORTHROW("Invalid feature atom index");
-      const RDGeom::Point3D &pos = conformer.getAtomPos(idx);
-      floc += pos;
+      floc += conformer.getAtomPos(idx);
     }
     floc /= feature_idx_type[i].first.size();
     DEBUG_MSG("feature type " << feature_idx_type[i].second << " (" << floc
                               << ")");
 
-    array_idx = nHeavyAtoms + i;
-    coord[array_idx * 3] = floc.x;
-    coord[(array_idx * 3) + 1] = floc.y;
-    coord[(array_idx * 3) + 2] = floc.z;
+    auto array_idx = nHeavyAtoms + i;
+    res.coord[array_idx * 3] = floc.x;
+    res.coord[(array_idx * 3) + 1] = floc.y;
+    res.coord[(array_idx * 3) + 2] = floc.z;
     rad_vector[array_idx] = radius_color;
-    atom_type_vector[array_idx] = feature_idx_type[i].second;
+    res.atom_type_vector[array_idx] = feature_idx_type[i].second;
   }
 
-  Align3D::setAlpha(&(rad_vector[0]), rad_vector.size(), alpha_vector);
+  Align3D::setAlpha(rad_vector.data(), rad_vector.size(), res.alpha_vector);
 
   // regular atom self overlap
-  Align3D::getVolumeAtomIndexVector(
-      &(atom_type_vector[0]), atom_type_vector.size(), volumeAtomIndexVector);
-  sov = Align3D::ComputeShapeOverlap(&(coord[0]), alpha_vector,
-                                     volumeAtomIndexVector, &(coord[0]),
-                                     alpha_vector, volumeAtomIndexVector);
-  DEBUG_MSG("sov: " << sov);
+  Align3D::getVolumeAtomIndexVector(res.atom_type_vector.data(),
+                                    res.atom_type_vector.size(),
+                                    res.volumeAtomIndexVector);
+  res.sov = Align3D::ComputeShapeOverlap(
+      res.coord.data(), res.alpha_vector, res.volumeAtomIndexVector,
+      res.coord.data(), res.alpha_vector, res.volumeAtomIndexVector);
+  DEBUG_MSG("sov: " << res.sov);
 
   // feature self overlap
   if (feature_idx_type.size() > 0) {
-    Align3D::getColorAtomType2IndexVectorMap(&(atom_type_vector[0]),
-                                             atom_type_vector.size(),
-                                             colorAtomType2IndexVectorMap);
-    sof = Align3D::ComputeFeatureOverlap(
-        &(coord[0]), alpha_vector, colorAtomType2IndexVectorMap, &(coord[0]),
-        alpha_vector, colorAtomType2IndexVectorMap);
-    DEBUG_MSG("sof: " << sof);
+    Align3D::getColorAtomType2IndexVectorMap(res.atom_type_vector.data(),
+                                             res.atom_type_vector.size(),
+                                             res.colorAtomType2IndexVectorMap);
+    res.sof = Align3D::ComputeFeatureOverlap(
+        res.coord.data(), res.alpha_vector, res.colorAtomType2IndexVectorMap,
+        res.coord.data(), res.alpha_vector, res.colorAtomType2IndexVectorMap);
+    DEBUG_MSG("sof: " << res.sof);
   }
+  return res;
 }
 
 void Neighbor(
@@ -326,57 +314,37 @@ void Neighbor(
     unsigned int max_preiters, unsigned int max_postiters,
     // outputs
     float *matrix, double &nbr_st, double &nbr_ct) {
-  vector<float> ref_coord;
-  vector<double> alpha_ref_vector;
-  vector<unsigned int> ref_volumeAtomIndexVector;
-  map<unsigned int, vector<unsigned int>> ref_colorAtomType2IndexVectorMap;
-  double ref_sov;
-  double ref_sof;
-  vector<unsigned int> ref_atom_type_vector;
-
-  vector<float> fit_coord;
-  vector<double> alpha_fit_vector;
-  vector<unsigned int> fit_volumeAtomIndexVector;
-  map<unsigned int, vector<unsigned int>> fit_colorAtomType2IndexVectorMap;
-  double fit_sov;
-  double fit_sof;
-  vector<unsigned int> fit_atom_type_vector;
-
   Align3D::setUseCutOff(true);
 
   DEBUG_MSG("Reference details:");
-  PrepareConformer(ref, ref_coord, alpha_ref_vector, ref_atom_type_vector,
-                   ref_volumeAtomIndexVector, ref_colorAtomType2IndexVectorMap,
-                   ref_sov, ref_sof);
+  auto refShape = PrepareConformer(ref);
 
   DEBUG_MSG("Fit details:");
-  PrepareConformer(fit, fit_coord, alpha_fit_vector, fit_atom_type_vector,
-                   fit_volumeAtomIndexVector, fit_colorAtomType2IndexVectorMap,
-                   fit_sov, fit_sof);
+  auto fitShape = PrepareConformer(fit);
 
   // write out ref and fit, both translated to origin but not yet aligned
   if (write_ref) {
-    writer.write(ref);
+    // writer.write(ref);
   }
 
   set<unsigned int> jointColorAtomTypeSet;
   Align3D::getJointColorTypeSet(
-      ref_atom_type_vector.data(), ref_atom_type_vector.size(),
-      fit_atom_type_vector.data(), fit_atom_type_vector.size(),
+      refShape.atom_type_vector.data(), refShape.atom_type_vector.size(),
+      fitShape.atom_type_vector.data(), fitShape.atom_type_vector.size(),
       jointColorAtomTypeSet);
   Align3D::restrictColorAtomType2IndexVectorMap(
-      ref_colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
+      refShape.colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
   Align3D::restrictColorAtomType2IndexVectorMap(
-      fit_colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
+      fitShape.colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
 
   DEBUG_MSG("Running alignment...");
   Align3D::Neighbor_Conformers(
-      ref_coord.data(), alpha_ref_vector, ref_volumeAtomIndexVector,
-      ref_colorAtomType2IndexVectorMap, ref_sov, ref_sof, fit_coord.data(),
-      alpha_fit_vector, fit_volumeAtomIndexVector,
-      fit_colorAtomType2IndexVectorMap, fit_sov, fit_sof,
-      !jointColorAtomTypeSet.empty(), true, max_preiters, max_postiters,
-      opt_param, matrix, nbr_st, nbr_ct);
+      refShape.coord.data(), refShape.alpha_vector,
+      refShape.volumeAtomIndexVector, refShape.colorAtomType2IndexVectorMap,
+      refShape.sov, refShape.sof, fitShape.coord.data(), fitShape.alpha_vector,
+      fitShape.volumeAtomIndexVector, fitShape.colorAtomType2IndexVectorMap,
+      fitShape.sov, fitShape.sof, !jointColorAtomTypeSet.empty(), true,
+      max_preiters, max_postiters, opt_param, matrix, nbr_st, nbr_ct);
 
   DEBUG_MSG("Done!");
   DEBUG_MSG("nbr_st: " << nbr_st);
@@ -385,8 +353,7 @@ void Neighbor(
   // transform fit coords
   Conformer &fit_conformer = fit.getConformer();
   vector<float> orig(fit.getNumAtoms() * 3), transformed(fit.getNumAtoms() * 3);
-  unsigned int i;
-  for (i = 0; i < fit.getNumAtoms(); ++i) {
+  for (unsigned i = 0; i < fit.getNumAtoms(); ++i) {
     const RDGeom::Point3D &pos = fit_conformer.getAtomPos(i);
     orig[i * 3] = pos.x;
     orig[(i * 3) + 1] = pos.y;
@@ -396,7 +363,7 @@ void Neighbor(
   Align3D::VApplyRotTransMatrix(transformed.data(), orig.data(),
                                 fit.getNumAtoms(), matrix);
 
-  for (i = 0; i < fit.getNumAtoms(); ++i) {
+  for (unsigned i = 0; i < fit.getNumAtoms(); ++i) {
     RDGeom::Point3D &pos = fit_conformer.getAtomPos(i);
     pos.x = transformed[i * 3];
     pos.y = transformed[(i * 3) + 1];
@@ -405,7 +372,7 @@ void Neighbor(
   fit.setProp("shape_align_shape_tanimoto", nbr_st);
   fit.setProp("shape_align_color_tanimoto", nbr_ct);
 
-  writer.write(fit);
+  // writer.write(fit);
 }
 
 int main(int argc, char **argv) {
@@ -430,16 +397,18 @@ int main(int argc, char **argv) {
     auto max_preiters = 3u;
     auto max_postiters = 16u;
 
-    for (auto i = 1u; i < suppl.length(); ++i) {
-      std::unique_ptr<ROMol> fit{suppl[i]};
-      if (!fit) {
-        continue;
+    for (auto n = 0u; n < 100; ++n) {
+      for (auto i = 1u; i < suppl.length(); ++i) {
+        std::unique_ptr<ROMol> fit{suppl[i]};
+        if (!fit) {
+          continue;
+        }
+        vector<float> matrix(12, 0.0);
+        double nbr_st = 0.0;
+        double nbr_ct = 0.0;
+        Neighbor(*ref, *fit, writer, i == 1, opt_param, max_preiters,
+                 max_postiters, &(matrix[0]), nbr_st, nbr_ct);
       }
-      vector<float> matrix(12, 0.0);
-      double nbr_st = 0.0;
-      double nbr_ct = 0.0;
-      Neighbor(*ref, *fit, writer, i == 1, opt_param, max_preiters,
-               max_postiters, &(matrix[0]), nbr_st, nbr_ct);
     }
 
     status = 0;
