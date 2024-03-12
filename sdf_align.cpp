@@ -90,32 +90,43 @@ typedef boost::flyweight<
     pattern_flyweight;
 // Definitions for feature points adapted from:
 // Gobbi and Poppinger, Biotech. Bioeng. _61_ 47-54 (1998)
-const std::vector<std::string> smartsPatterns = {
-    "[$([N;!H0;v3,v4&+1]),\
+const std::vector<std::vector<std::string>> smartsPatterns = {
+    {"[$([N;!H0;v3,v4&+1]),\
 $([O,S;H1;+0]),\
-n&H1&+0]",                               // Donor
-    "[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),\
+n&H1&+0]"},                               // Donor
+    {"[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),\
 $([O,S;H0;v2]),\
 $([O,S;-]),\
 $([N;v3;!$(N-*=[O,N,P,S])]),\
 n&H0&+0,\
-$([o,s;+0;!$([o,s]:n);!$([o,s]:c:n)])]", // Acceptor
-    //    "[a]",                                                  // Aromatic
-    //    "[F,Cl,Br,I]",                                          // Halogen
-    "[#7;+,\
+$([o,s;+0;!$([o,s]:n);!$([o,s]:c:n)])]"}, // Acceptor
+    {
+        "[r]1[r][r]1",
+        "[r]1[r][r][r]1",
+        "[r]1[r][r][r][r]1",
+        "[r]1[r][r][r][r][r]1",
+        "[r]1[r][r][r][r][r][r]1",
+    }, // rings
+       //    "[a]",                                                  // Aromatic
+       //    "[F,Cl,Br,I]",                                          // Halogen
+    {"[#7;+,\
 $([N;H2&+0][$([C,a]);!$([C,a](=O))]),\
 $([N;H1&+0]([$([C,a]);!$([C,a](=O))])[$([C,a]);!$([C,a](=O))]),\
-$([N;H0&+0]([C;!$(C(=O))])([C;!$(C(=O))])[C;!$(C(=O))])]", // Basic
-    "[$([C,S](=[O,S,P])-[O;H1,-1])]"                       // Acidic
+$([N;H0&+0]([C;!$(C(=O))])([C;!$(C(=O))])[C;!$(C(=O))])]"}, // Basic
+    {"[$([C,S](=[O,S,P])-[O;H1,-1])]"}                      // Acidic
 };
-std::vector<const ROMol *> *getPh4Patterns() {
-  static std::unique_ptr<std::vector<const ROMol *>> patterns;
+std::vector<std::vector<const ROMol *>> *getPh4Patterns() {
+  static std::unique_ptr<std::vector<std::vector<const ROMol *>>> patterns;
   if (!patterns) {
-    patterns.reset(new std::vector<const ROMol *>());
-    for (auto smarts : RDKit::MorganFingerprints::defaultFeatureSmarts) {
-      const ROMol *matcher = pattern_flyweight(smarts).get().getMatcher();
-      CHECK_INVARIANT(matcher, "bad smarts");
-      patterns->push_back(matcher);
+    patterns.reset(new std::vector<std::vector<const ROMol *>>());
+    for (const auto &smartsV : smartsPatterns) {
+      std::vector<const ROMol *> v;
+      for (const auto &smarts : smartsV) {
+        const ROMol *matcher = pattern_flyweight(smarts).get().getMatcher();
+        CHECK_INVARIANT(matcher, "bad smarts");
+        v.push_back(matcher);
+      }
+      patterns->push_back(std::move(v));
     }
   }
 
@@ -133,7 +144,8 @@ using ShapeInput = struct {
 };
 
 // the conformer is translated to the origin
-ShapeInput PrepareConformer(ROMol &mol, int confId = -1) {
+ShapeInput PrepareConformer(ROMol &mol, int confId = -1,
+                            bool useColors = true) {
   ShapeInput res;
 
   // unpack features (PubChem-specific property from SDF)
@@ -143,73 +155,77 @@ ShapeInput PrepareConformer(ROMol &mol, int confId = -1) {
 
   vector<pair<vector<unsigned int>, unsigned int>> feature_idx_type;
 
-  std::string features;
-  if (mol.getPropIfPresent("PUBCHEM_PHARMACOPHORE_FEATURES", features)) {
+  if (useColors) {
+    std::string features;
+    if (mol.getPropIfPresent("PUBCHEM_PHARMACOPHORE_FEATURES", features)) {
 
-    // regular atoms have type 0; feature "atoms" (features represented by a
-    // single point+radius) must have type > 0
-    static const map<string, unsigned int> atomTypes = {
-        {"acceptor", 1}, {"anion", 2},      {"cation", 3},
-        {"donor", 4},    {"hydrophobe", 5}, {"rings", 6},
-    };
+      // regular atoms have type 0; feature "atoms" (features represented by a
+      // single point+radius) must have type > 0
+      static const map<string, unsigned int> atomTypes = {
+          {"acceptor", 1}, {"anion", 2},      {"cation", 3},
+          {"donor", 4},    {"hydrophobe", 5}, {"rings", 6},
+      };
 
-    istringstream iss(features);
-    string line;
-    unsigned int n = 0;
-    while (getline(iss, line)) {
+      istringstream iss(features);
+      string line;
+      unsigned int n = 0;
+      while (getline(iss, line)) {
 
-      if (n == 0) {
-        feature_idx_type.resize(stoul(line));
-      }
+        if (n == 0) {
+          feature_idx_type.resize(stoul(line));
+        }
 
-      else {
-        unsigned int f = n - 1;
-        if (f >= feature_idx_type.size())
-          ERRORTHROW("Too many features");
+        else {
+          unsigned int f = n - 1;
+          if (f >= feature_idx_type.size())
+            ERRORTHROW("Too many features");
 
-        istringstream iss2(line);
-        string token;
-        unsigned int t = 0;
-        while (getline(iss2, token, ' ')) {
-          if (t == 0) {
-            feature_idx_type[f].first.resize(stoul(token));
-          } else if (t <= feature_idx_type[f].first.size()) {
-            feature_idx_type[f].first[t - 1] = stoul(token) - 1;
-          } else {
-            map<string, unsigned int>::const_iterator type =
-                atomTypes.find(token);
-            if (type == atomTypes.end())
-              ERRORTHROW("Invalid feature type");
-            feature_idx_type[f].second = type->second;
+          istringstream iss2(line);
+          string token;
+          unsigned int t = 0;
+          while (getline(iss2, token, ' ')) {
+            if (t == 0) {
+              feature_idx_type[f].first.resize(stoul(token));
+            } else if (t <= feature_idx_type[f].first.size()) {
+              feature_idx_type[f].first[t - 1] = stoul(token) - 1;
+            } else {
+              map<string, unsigned int>::const_iterator type =
+                  atomTypes.find(token);
+              if (type == atomTypes.end())
+                ERRORTHROW("Invalid feature type");
+              feature_idx_type[f].second = type->second;
+            }
+            ++t;
           }
-          ++t;
+          if (t != (feature_idx_type[f].first.size() + 2))
+            ERRORTHROW("Wrong number of tokens in feature");
         }
-        if (t != (feature_idx_type[f].first.size() + 2))
-          ERRORTHROW("Wrong number of tokens in feature");
+
+        ++n;
       }
+      if (n != (feature_idx_type.size() + 1))
+        ERRORTHROW("Wrong number of features");
 
-      ++n;
-    }
-    if (n != (feature_idx_type.size() + 1))
-      ERRORTHROW("Wrong number of features");
+      DEBUG_MSG("# features: " << feature_idx_type.size());
+    } else {
+      const auto pattVects = getPh4Patterns();
+      feature_idx_type.clear();
 
-    DEBUG_MSG("# features: " << feature_idx_type.size());
-  } else {
-#if 1
-    const auto patts = getPh4Patterns();
-    feature_idx_type.clear();
-
-    for (auto p = 0u; p < patts->size(); ++p) {
-      auto matches = SubstructMatch(mol, *patts->at(p));
-      for (auto match : matches) {
-        std::vector<unsigned int> ats;
-        for (const auto &pr : match) {
-          ats.push_back(pr.second);
+      unsigned pattIdx = 1;
+      for (const auto &patts : *pattVects) {
+        for (const auto patt : patts) {
+          auto matches = SubstructMatch(mol, *patt);
+          for (auto match : matches) {
+            std::vector<unsigned int> ats;
+            for (const auto &pr : match) {
+              ats.push_back(pr.second);
+            }
+            feature_idx_type.emplace_back(ats, pattIdx);
+          }
         }
-        feature_idx_type.emplace_back(ats, p + 1);
+        ++pattIdx;
       }
     }
-#endif
   }
 
   // unpack atoms
@@ -308,24 +324,17 @@ ShapeInput PrepareConformer(ROMol &mol, int confId = -1) {
   return res;
 }
 
-void Neighbor(
+std::pair<double, double> Neighbor(
     // inputs
-    ROMol &ref, ROMol &fit, SDWriter &writer, bool write_ref, double opt_param,
-    unsigned int max_preiters, unsigned int max_postiters,
-    // outputs
-    float *matrix, double &nbr_st, double &nbr_ct) {
+    ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
+    int refConfId = -1, int fitConfId = -1, bool useColors = true,
+    double opt_param = 0.5, unsigned int max_preiters = 3u,
+    unsigned int max_postiters = 16u) {
+  PRECONDITION(matrix.size() == 12, "bad matrix size");
   Align3D::setUseCutOff(true);
 
-  DEBUG_MSG("Reference details:");
-  auto refShape = PrepareConformer(ref);
-
   DEBUG_MSG("Fit details:");
-  auto fitShape = PrepareConformer(fit);
-
-  // write out ref and fit, both translated to origin but not yet aligned
-  if (write_ref) {
-    // writer.write(ref);
-  }
+  auto fitShape = PrepareConformer(fit, fitConfId, useColors);
 
   set<unsigned int> jointColorAtomTypeSet;
   Align3D::getJointColorTypeSet(
@@ -338,13 +347,15 @@ void Neighbor(
       fitShape.colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
 
   DEBUG_MSG("Running alignment...");
+  double nbr_st = 0.0;
+  double nbr_ct = 0.0;
   Align3D::Neighbor_Conformers(
       refShape.coord.data(), refShape.alpha_vector,
       refShape.volumeAtomIndexVector, refShape.colorAtomType2IndexVectorMap,
       refShape.sov, refShape.sof, fitShape.coord.data(), fitShape.alpha_vector,
       fitShape.volumeAtomIndexVector, fitShape.colorAtomType2IndexVectorMap,
       fitShape.sov, fitShape.sof, !jointColorAtomTypeSet.empty(), true,
-      max_preiters, max_postiters, opt_param, matrix, nbr_st, nbr_ct);
+      max_preiters, max_postiters, opt_param, matrix.data(), nbr_st, nbr_ct);
 
   DEBUG_MSG("Done!");
   DEBUG_MSG("nbr_st: " << nbr_st);
@@ -361,7 +372,7 @@ void Neighbor(
   }
 
   Align3D::VApplyRotTransMatrix(transformed.data(), orig.data(),
-                                fit.getNumAtoms(), matrix);
+                                fit.getNumAtoms(), matrix.data());
 
   for (unsigned i = 0; i < fit.getNumAtoms(); ++i) {
     RDGeom::Point3D &pos = fit_conformer.getAtomPos(i);
@@ -372,7 +383,21 @@ void Neighbor(
   fit.setProp("shape_align_shape_tanimoto", nbr_st);
   fit.setProp("shape_align_color_tanimoto", nbr_ct);
 
-  // writer.write(fit);
+  return std::make_pair(nbr_st, nbr_ct);
+}
+
+std::pair<double, double>
+Neighbor(ROMol &ref, ROMol &fit, std::vector<float> &matrix, int refConfId = -1,
+         int fitConfId = -1, bool useColors = true, bool write_ref = true,
+         double opt_param = 0.5, unsigned int max_preiters = 3u,
+         unsigned int max_postiters = 16u) {
+  Align3D::setUseCutOff(true);
+
+  DEBUG_MSG("Reference details:");
+  auto refShape = PrepareConformer(ref, refConfId, useColors);
+
+  return Neighbor(refShape, fit, matrix, refConfId, fitConfId, useColors,
+                  opt_param, max_preiters, max_postiters);
 }
 
 int main(int argc, char **argv) {
@@ -385,30 +410,31 @@ int main(int argc, char **argv) {
                  "is the reference"); //"opt_param
                                       // max_preiters
                                       // max_postiters");
+    bool useColors = true;
 
-    SDMolSupplier suppl(argv[1]);
+    bool sanitize = true;
+    bool removeHs = false;
+    SDMolSupplier suppl(argv[1], sanitize, removeHs);
     SDWriter writer("sdf_align.out.sdf");
     unique_ptr<ROMol> ref{suppl[0]};
     if (!ref.get()) {
       ERRORTHROW("Failed to read ref conformer");
     }
 
-    auto opt_param = 0.5;
-    auto max_preiters = 3u;
-    auto max_postiters = 16u;
-
-    for (auto n = 0u; n < 100; ++n) {
-      for (auto i = 1u; i < suppl.length(); ++i) {
-        std::unique_ptr<ROMol> fit{suppl[i]};
-        if (!fit) {
-          continue;
-        }
-        vector<float> matrix(12, 0.0);
-        double nbr_st = 0.0;
-        double nbr_ct = 0.0;
-        Neighbor(*ref, *fit, writer, i == 1, opt_param, max_preiters,
-                 max_postiters, &(matrix[0]), nbr_st, nbr_ct);
+    for (auto i = 1u; i < suppl.length(); ++i) {
+      std::unique_ptr<ROMol> fit{suppl[i]};
+      if (!fit) {
+        continue;
       }
+      vector<float> matrix(12, 0.0);
+      int refConfId = -1;
+      int fitConfId = -1;
+      auto [nbr_st, nbr_ct] =
+          Neighbor(*ref, *fit, matrix, refConfId, fitConfId, useColors);
+      if (i == 1) {
+        writer.write(*ref, refConfId);
+      }
+      writer.write(*fit, fitConfId);
     }
 
     status = 0;
