@@ -324,7 +324,7 @@ ShapeInput PrepareConformer(ROMol &mol, int confId = -1,
   return res;
 }
 
-std::pair<double, double> Neighbor(
+std::pair<double, double> AlignMolecule(
     // inputs
     ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
     int refConfId = -1, int fitConfId = -1, bool useColors = true,
@@ -387,17 +387,17 @@ std::pair<double, double> Neighbor(
 }
 
 std::pair<double, double>
-Neighbor(ROMol &ref, ROMol &fit, std::vector<float> &matrix, int refConfId = -1,
-         int fitConfId = -1, bool useColors = true, bool write_ref = true,
-         double opt_param = 0.5, unsigned int max_preiters = 3u,
-         unsigned int max_postiters = 16u) {
+AlignMolecule(ROMol &ref, ROMol &fit, std::vector<float> &matrix,
+              int refConfId = -1, int fitConfId = -1, bool useColors = true,
+              double opt_param = 0.5, unsigned int max_preiters = 3u,
+              unsigned int max_postiters = 16u) {
   Align3D::setUseCutOff(true);
 
   DEBUG_MSG("Reference details:");
   auto refShape = PrepareConformer(ref, refConfId, useColors);
 
-  return Neighbor(refShape, fit, matrix, refConfId, fitConfId, useColors,
-                  opt_param, max_preiters, max_postiters);
+  return AlignMolecule(refShape, fit, matrix, refConfId, fitConfId, useColors,
+                       opt_param, max_preiters, max_postiters);
 }
 
 int main(int argc, char **argv) {
@@ -430,7 +430,7 @@ int main(int argc, char **argv) {
       int refConfId = -1;
       int fitConfId = -1;
       auto [nbr_st, nbr_ct] =
-          Neighbor(*ref, *fit, matrix, refConfId, fitConfId, useColors);
+          AlignMolecule(*ref, *fit, matrix, refConfId, fitConfId, useColors);
       if (i == 1) {
         writer.write(*ref, refConfId);
       }
