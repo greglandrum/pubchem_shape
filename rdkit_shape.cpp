@@ -166,7 +166,7 @@ std::vector<std::vector<const ROMol *>> *getPh4Patterns() {
 }
 
 // the conformer is translated to the origin
-ShapeInput PrepareConformer(ROMol &mol, int confId, bool useColors) {
+ShapeInput PrepareConformer(const ROMol &mol, int confId, bool useColors) {
   ShapeInput res;
 
   // unpack features (PubChem-specific property from SDF)
@@ -251,7 +251,7 @@ ShapeInput PrepareConformer(ROMol &mol, int confId, bool useColors) {
 
   // unpack atoms
 
-  Conformer &conformer = mol.getConformer(confId);
+  auto &conformer = mol.getConformer(confId);
   if (!conformer.is3D())
     ERRORTHROW("Conformer must be 3D");
 
@@ -287,7 +287,7 @@ ShapeInput PrepareConformer(ROMol &mol, int confId, bool useColors) {
 
   for (unsigned i = 0; i < nAtoms; ++i) {
     // translate all atoms
-    RDGeom::Point3D &pos = conformer.getAtomPos(i);
+    RDGeom::Point3D pos = conformer.getAtomPos(i);
     pos -= ave;
 
     // but use only non-H for alignment
@@ -406,8 +406,8 @@ AlignMolecule(ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
 }
 
 std::pair<double, double>
-AlignMolecule(ROMol &ref, ROMol &fit, std::vector<float> &matrix, int refConfId,
-              int fitConfId, bool useColors, double opt_param,
+AlignMolecule(const ROMol &ref, ROMol &fit, std::vector<float> &matrix,
+              int refConfId, int fitConfId, bool useColors, double opt_param,
               unsigned int max_preiters, unsigned int max_postiters) {
   Align3D::setUseCutOff(true);
 

@@ -10,7 +10,10 @@ add_library(pubchem_align3d SHARED shape_functions1.cpp shape_functions2.cpp sha
 
 
 add_library(rdkit_shape SHARED rdkit_shape.cpp)
-target_link_libraries(rdkit_shape pubchem_align3d RDKit::SubstructMatch)
+target_link_libraries(rdkit_shape pubchem_align3d RDKit::SmilesParse RDKit::SubstructMatch)
+target_include_directories(rdkit_shape PUBLIC ${RDKIT_INCLUDE_DIR} ${Boost_INCLUDE_DIR})
+
+add_subdirectory(Wrap)
 
 add_executable(rdkit_test rdkit_align3d_test.cpp )
 target_link_libraries(rdkit_test pubchem_align3d RDKit::FileParsers)

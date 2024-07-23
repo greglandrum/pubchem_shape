@@ -13,7 +13,7 @@ using ShapeInput = struct {
   double sof{0.0};
 };
 
-ShapeInput PrepareConformer(RDKit::ROMol &mol, int confId = -1,
+ShapeInput PrepareConformer(const RDKit::ROMol &mol, int confId = -1,
                             bool useColors = true);
 
 std::pair<double, double>
@@ -23,7 +23,7 @@ AlignMolecule(ShapeInput &refShape, RDKit::ROMol &fit,
               unsigned int max_preiters = 3u, unsigned int max_postiters = 16u);
 
 std::pair<double, double>
-AlignMolecule(RDKit::ROMol &ref, RDKit::ROMol &fit, std::vector<float> &matrix,
-              int refConfId = -1, int fitConfId = -1, bool useColors = true,
-              double opt_param = 0.5, unsigned int max_preiters = 3u,
-              unsigned int max_postiters = 16u);
+AlignMolecule(const RDKit::ROMol &ref, RDKit::ROMol &fit,
+              std::vector<float> &matrix, int refConfId = -1,
+              int fitConfId = -1, bool useColors = true, double opt_param = 0.5,
+              unsigned int max_preiters = 3u, unsigned int max_postiters = 16u);
