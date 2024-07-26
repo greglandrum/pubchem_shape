@@ -55,3 +55,21 @@ TEST_CASE("basic alignment") {
     CHECK_THAT(nbr_ct, Catch::Matchers::WithinAbs(0.000, 0.005));
   }
 }
+
+TEST_CASE("bulk") {
+  auto suppl = v2::FileParsers::SDMolSupplier("../test_data/bulk.pubchem.sdf");
+  auto ref = suppl[0];
+  REQUIRE(ref);
+  for (auto i = 1; i < suppl.length(); ++i) {
+    auto probe = suppl[1];
+    REQUIRE(probe);
+    std::vector<float> matrix(12, 0.0);
+    auto [nbr_st, nbr_ct] = AlignMolecule(*ref, *probe, matrix);
+    CHECK_THAT(nbr_st,
+               Catch::Matchers::WithinAbs(
+                   probe->getProp<float>("shape_align_shape_tanimoto"), 0.005));
+    CHECK_THAT(nbr_ct,
+               Catch::Matchers::WithinAbs(
+                   probe->getProp<float>("shape_align_color_tanimoto"), 0.005));
+  }
+}
