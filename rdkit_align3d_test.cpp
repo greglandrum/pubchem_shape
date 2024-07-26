@@ -324,7 +324,6 @@ void Neighbor(
         fit_sov,
         fit_sof,
         !jointColorAtomTypeSet.empty(),
-        true,
         max_preiters,
         max_postiters,
         opt_param,

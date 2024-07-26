@@ -373,7 +373,7 @@ void Neighbor(
       ref_colorAtomType2IndexVectorMap, ref_sov, ref_sof, fit_coord.data(),
       alpha_fit_vector, fit_volumeAtomIndexVector,
       fit_colorAtomType2IndexVectorMap, fit_sov, fit_sof,
-      !jointColorAtomTypeSet.empty(), true, max_preiters, max_postiters,
+      !jointColorAtomTypeSet.empty(), max_preiters, max_postiters,
       opt_param, matrix, nbr_st, nbr_ct);
 
   DEBUG_MSG("Done!");

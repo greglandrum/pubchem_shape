@@ -1,3 +1,33 @@
+/*  $Id: shape_neighbor.cpp 685605 2024-07-26 12:29:33Z thiessen $
+* ===========================================================================
+*
+*                            PUBLIC DOMAIN NOTICE
+*               National Center for Biotechnology Information
+*
+*  This software/database is a "United States Government Work" under the
+*  terms of the United States Copyright Act.  It was written as part of
+*  the author's official duties as a United States Government employee and
+*  thus cannot be copyrighted.  This software/database is freely available
+*  to the public for use. The National Library of Medicine and the U.S.
+*  Government have not placed any restriction on its use or reproduction.
+*
+*  Although all reasonable efforts have been taken to ensure the accuracy
+*  and reliability of the software and data, the NLM and the U.S.
+*  Government do not and cannot warrant the performance or results that
+*  may be obtained by using this software or data. The NLM and the U.S.
+*  Government disclaim all warranties, express or implied, including
+*  warranties of performance, merchantability or fitness for any particular
+*  purpose.
+*
+*  Please cite the author in any work or product based on this material.
+*
+* ===========================================================================
+*
+* Authors:  Evan Bolton, Leonid Zaslavsky, Paul Thiessen
+*
+* ===========================================================================
+*/
+
 // C++ Includes
 
 #include <cmath>
@@ -30,7 +60,6 @@ void Neighbor_Conformers(
 				      const double fit_sov,
 				      const double fit_sof,
 				      const bool considerColorAtoms,
-				      const bool is_qrat_nonzero,
 				      const unsigned max_preiters,
 				      const unsigned max_postiters,
 				      const double opt_param,
@@ -64,6 +93,24 @@ void Neighbor_Conformers(
     }
   }
        
+  // Qrat stuff
+  const float qrat_threshold = 0.7225; // 0.85*0.85;
+    
+  unsigned ref_qrat = 1000;
+  {
+    std::vector< float > ref_coord_work_vec(alpha_ref_vector.size() * 3);
+    memcpy(&(ref_coord_work_vec[0]), ref_coord, (alpha_ref_vector.size() * 3 * sizeof(float)));
+    TransformCoordToStericFrameAndCalculateQrat( alpha_ref_vector.size(), qrat_threshold, &( ref_coord_work_vec[0] ), ref_qrat );
+  }
+  unsigned fit_qrat = 1000;
+  {
+    std::vector< float > fit_coord_work_vec(alpha_fit_vector.size() * 3);
+    memcpy(&(fit_coord_work_vec[0]), fit_coord, (alpha_fit_vector.size() * 3 * sizeof(float)));
+    TransformCoordToStericFrameAndCalculateQrat( alpha_fit_vector.size(), qrat_threshold, &( fit_coord_work_vec[0] ), fit_qrat );
+  }
+
+  bool is_qrat_nonzero = (ref_qrat > 0 || fit_qrat > 0);
+  
   unsigned  npose = 0;
   if( is_qrat_nonzero ){
     npose = 16;
