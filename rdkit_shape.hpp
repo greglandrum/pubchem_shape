@@ -9,6 +9,7 @@ using ShapeInput = struct ShapeInputStruct {
   std::vector<unsigned int> volumeAtomIndexVector;
   std::map<unsigned int, std::vector<unsigned int>>
       colorAtomType2IndexVectorMap;
+  std::vector<double> shift;
   double sov{0.0};
   double sof{0.0};
 };

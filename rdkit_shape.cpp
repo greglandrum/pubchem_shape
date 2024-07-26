@@ -179,7 +179,6 @@ ShapeInput PrepareConformer(const ROMol &mol, int confId, bool useColors) {
   if (useColors) {
     std::string features;
     if (mol.getPropIfPresent("PUBCHEM_PHARMACOPHORE_FEATURES", features)) {
-
       // regular atoms have type 0; feature "atoms" (features represented by a
       // single point+radius) must have type > 0
       static const map<string, unsigned int> atomTypes = {
@@ -282,7 +281,7 @@ ShapeInput PrepareConformer(const ROMol &mol, int confId, bool useColors) {
   // translate steric center to origin
   ave /= nHeavyAtoms;
   DEBUG_MSG("steric center: (" << ave << ")");
-
+  res.shift = {-ave.x, -ave.y, -ave.z};
   res.coord.resize(nAlignmentAtoms * 3);
 
   for (unsigned i = 0; i < nAtoms; ++i) {
@@ -310,6 +309,7 @@ ShapeInput PrepareConformer(const ROMol &mol, int confId, bool useColors) {
       floc += conformer.getAtomPos(idx);
     }
     floc /= feature_idx_type[i].first.size();
+    floc -= ave;
     DEBUG_MSG("feature type " << feature_idx_type[i].second << " (" << floc
                               << ")");
 
@@ -383,23 +383,18 @@ std::pair<double, double> AlignMolecule(const ShapeInput &refShape, ROMol &fit,
   DEBUG_MSG("nbr_ct: " << nbr_ct);
 
   // transform fit coords
-  Conformer &fit_conformer = fit.getConformer();
-  vector<float> orig(fit.getNumAtoms() * 3), transformed(fit.getNumAtoms() * 3);
-  for (unsigned i = 0; i < fit.getNumAtoms(); ++i) {
-    const RDGeom::Point3D &pos = fit_conformer.getAtomPos(i);
-    orig[i * 3] = pos.x;
-    orig[(i * 3) + 1] = pos.y;
-    orig[(i * 3) + 2] = pos.z;
-  }
-
-  Align3D::VApplyRotTransMatrix(transformed.data(), orig.data(),
+  vector<float> transformed(fit.getNumAtoms() * 3);
+  Align3D::VApplyRotTransMatrix(transformed.data(), fitShape.coord.data(),
                                 fit.getNumAtoms(), matrix.data());
 
+  Conformer &fit_conformer = fit.getConformer();
   for (unsigned i = 0; i < fit.getNumAtoms(); ++i) {
     RDGeom::Point3D &pos = fit_conformer.getAtomPos(i);
-    pos.x = transformed[i * 3];
-    pos.y = transformed[(i * 3) + 1];
-    pos.z = transformed[(i * 3) + 2];
+    // both conformers have been translated to the origin, translate the fit
+    // conformer back to the steric center of the reference.
+    pos.x = transformed[i * 3] - refShape.shift[0];
+    pos.y = transformed[(i * 3) + 1] - refShape.shift[1];
+    pos.z = transformed[(i * 3) + 2] - refShape.shift[2];
   }
   fit.setProp("shape_align_shape_tanimoto", nbr_st);
   fit.setProp("shape_align_color_tanimoto", nbr_ct);

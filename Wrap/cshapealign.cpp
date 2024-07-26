@@ -89,6 +89,7 @@ void wrap_pubchemshape() {
       .def_readwrite("atom_type_vector", &ShapeInput::atom_type_vector)
       .def_readwrite("volumeAtomIndexVector",
                      &ShapeInput::volumeAtomIndexVector)
+      .def_readwrite("shift", &ShapeInput::shift)
       .def_readwrite("sov", &ShapeInput::sov)
       .def_readwrite("sof", &ShapeInput::sof);
 }
