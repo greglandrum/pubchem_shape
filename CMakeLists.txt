@@ -5,6 +5,16 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 
+Include(FetchContent)
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.4.0 # or a later release
+)
+
+FetchContent_MakeAvailable(Catch2)
+
 find_package(RDKit REQUIRED)
 add_library(pubchem_align3d SHARED shape_functions1.cpp shape_functions2.cpp shape_neighbor.cpp)
 
@@ -20,3 +30,8 @@ target_link_libraries(rdkit_test pubchem_align3d RDKit::FileParsers)
 
 add_executable(sdf_align sdf_align.cpp )
 target_link_libraries(sdf_align rdkit_shape pubchem_align3d RDKit::SubstructMatch RDKit::FileParsers)
+
+add_executable(tests test.cpp)
+target_link_libraries(tests PRIVATE Catch2::Catch2WithMain rdkit_shape RDKit::FileParsers )
+
+
