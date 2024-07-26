@@ -345,10 +345,12 @@ ShapeInput PrepareConformer(const ROMol &mol, int confId, bool useColors) {
   return res;
 }
 
-std::pair<double, double>
-AlignMolecule(ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
-              int refConfId, int fitConfId, bool useColors, double opt_param,
-              unsigned int max_preiters, unsigned int max_postiters) {
+std::pair<double, double> AlignMolecule(const ShapeInput &refShape, ROMol &fit,
+                                        std::vector<float> &matrix,
+                                        int fitConfId, bool useColors,
+                                        double opt_param,
+                                        unsigned int max_preiters,
+                                        unsigned int max_postiters) {
   PRECONDITION(matrix.size() == 12, "bad matrix size");
   Align3D::setUseCutOff(true);
 
@@ -360,8 +362,8 @@ AlignMolecule(ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
       refShape.atom_type_vector.data(), refShape.atom_type_vector.size(),
       fitShape.atom_type_vector.data(), fitShape.atom_type_vector.size(),
       jointColorAtomTypeSet);
-  Align3D::restrictColorAtomType2IndexVectorMap(
-      refShape.colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
+  auto mapCp = refShape.colorAtomType2IndexVectorMap;
+  Align3D::restrictColorAtomType2IndexVectorMap(mapCp, jointColorAtomTypeSet);
   Align3D::restrictColorAtomType2IndexVectorMap(
       fitShape.colorAtomType2IndexVectorMap, jointColorAtomTypeSet);
 
@@ -370,8 +372,8 @@ AlignMolecule(ShapeInput &refShape, ROMol &fit, std::vector<float> &matrix,
   double nbr_ct = 0.0;
   Align3D::Neighbor_Conformers(
       refShape.coord.data(), refShape.alpha_vector,
-      refShape.volumeAtomIndexVector, refShape.colorAtomType2IndexVectorMap,
-      refShape.sov, refShape.sof, fitShape.coord.data(), fitShape.alpha_vector,
+      refShape.volumeAtomIndexVector, mapCp, refShape.sov, refShape.sof,
+      fitShape.coord.data(), fitShape.alpha_vector,
       fitShape.volumeAtomIndexVector, fitShape.colorAtomType2IndexVectorMap,
       fitShape.sov, fitShape.sof, !jointColorAtomTypeSet.empty(), true,
       max_preiters, max_postiters, opt_param, matrix.data(), nbr_st, nbr_ct);
@@ -414,6 +416,6 @@ AlignMolecule(const ROMol &ref, ROMol &fit, std::vector<float> &matrix,
   DEBUG_MSG("Reference details:");
   auto refShape = PrepareConformer(ref, refConfId, useColors);
 
-  return AlignMolecule(refShape, fit, matrix, refConfId, fitConfId, useColors,
-                       opt_param, max_preiters, max_postiters);
+  return AlignMolecule(refShape, fit, matrix, fitConfId, useColors, opt_param,
+                       max_preiters, max_postiters);
 }
