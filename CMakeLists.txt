@@ -27,9 +27,6 @@ target_include_directories(rdkit_shape PUBLIC ${RDKIT_INCLUDE_DIR} ${Boost_INCLU
 
 add_subdirectory(Wrap)
 
-# add_executable(rdkit_test rdkit_align3d_test.cpp )
-# target_link_libraries(rdkit_test pubchem_align3d RDKit::FileParsers)
-
 add_executable(sdf_align sdf_align.cpp )
 target_link_libraries(sdf_align rdkit_shape RDKit::SubstructMatch RDKit::FileParsers)
 
