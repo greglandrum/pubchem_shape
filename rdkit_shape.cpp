@@ -12,8 +12,8 @@
 #include <boost/flyweight/key_value.hpp>
 #include <boost/flyweight/no_tracking.hpp>
 
+#include "pubchem-align3d/shape_functions.hpp"
 #include "rdkit_shape.hpp"
-#include "shape_functions.hpp"
 
 using namespace std;
 

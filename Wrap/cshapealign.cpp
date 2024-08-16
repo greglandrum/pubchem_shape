@@ -28,7 +28,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <vector>
 
 #include "../rdkit_shape.hpp"
-#include "../shape_functions.hpp"
 #include <GraphMol/RDKitBase.h>
 #include <RDBoost/Wrap.h>
 namespace python = boost::python;

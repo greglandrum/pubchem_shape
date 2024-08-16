@@ -1,7 +1,7 @@
 find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(py3lib "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
-find_package(Boost COMPONENTS ${py3lib} REQUIRED)
+find_package(Boost COMPONENTS ${py3lib} REQUIRED CONFIG)
 
 # Without this, any build libraries automatically have names "lib{x}.so"
 set(CMAKE_SHARED_MODULE_PREFIX "")

@@ -16,7 +16,6 @@
 #include <boost/flyweight/no_tracking.hpp>
 
 #include "rdkit_shape.hpp"
-#include "shape_functions.hpp"
 
 using namespace std;
 
