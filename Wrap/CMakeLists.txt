@@ -9,3 +9,6 @@ set(CMAKE_SHARED_MODULE_PREFIX "")
 python3_add_library(rdShapeAlign MODULE cshapealign.cpp)
 target_link_libraries(rdShapeAlign PRIVATE rdkit_shape Boost::${py3lib})
 set_target_properties(rdShapeAlign PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../pubchem_shape)
+
+add_test(NAME pyShapeAlign  COMMAND ${Python3_EXECUTABLE} -m pytest 
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/.. )
