@@ -6,6 +6,6 @@ find_package(Boost COMPONENTS ${py3lib} REQUIRED CONFIG)
 # Without this, any build libraries automatically have names "lib{x}.so"
 set(CMAKE_SHARED_MODULE_PREFIX "")
 
-python3_add_library(cshapealign MODULE cshapealign.cpp)
-target_link_libraries(cshapealign PRIVATE rdkit_shape Boost::${py3lib})
-set_target_properties(cshapealign PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../pubchem_shape)
+python3_add_library(rdShapeAlign MODULE cshapealign.cpp)
+target_link_libraries(rdShapeAlign PRIVATE rdkit_shape Boost::${py3lib})
+set_target_properties(rdShapeAlign PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../pubchem_shape)

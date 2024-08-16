@@ -93,4 +93,4 @@ void wrap_pubchemshape() {
       .def_readwrite("sof", &ShapeInput::sof);
 }
 
-BOOST_PYTHON_MODULE(cshapealign) { wrap_pubchemshape(); }
+BOOST_PYTHON_MODULE(rdShapeAlign) { wrap_pubchemshape(); }
