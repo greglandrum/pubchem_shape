@@ -1,0 +1,3 @@
+[submodule "pubchem-align3d"]
+	path = pubchem-align3d
+	url = git@github.com:ncbi/pubchem-align3d.git

@@ -1,0 +1,14 @@
+find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(py3lib "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
+find_package(Boost COMPONENTS ${py3lib} REQUIRED CONFIG)
+
+# Without this, any build libraries automatically have names "lib{x}.so"
+set(CMAKE_SHARED_MODULE_PREFIX "")
+
+python3_add_library(rdShapeAlign MODULE cshapealign.cpp)
+target_link_libraries(rdShapeAlign PRIVATE rdkit_shape Boost::${py3lib})
+set_target_properties(rdShapeAlign PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../pubchem_shape)
+
+add_test(NAME pyShapeAlign  COMMAND ${Python3_EXECUTABLE} -m pytest 
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/.. )
